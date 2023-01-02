@@ -17,6 +17,10 @@ let hand_pressed = null;
 for (let i=0; i<8; ++i) {
   p1hand[i].onclick = hand_click;
   p2hand[i].onclick = hand_click;
+  p1hand[i].onmouseover = highlight_pairs;
+  p2hand[i].onmouseover = highlight_pairs;
+  p1hand[i].onmouseout = unhighlight;
+  p2hand[i].onmouseout = unhighlight;
 }
 for (let i=0; i<16; ++i) {
   board[i].addEventListener("click",board_click,false)
@@ -24,10 +28,50 @@ for (let i=0; i<16; ++i) {
 
 function hand_click(e) {
   for (let i=0; i<8;++i) {
-    if (e.currentTarget == p1hand[i] || e.currentTarget == p2hand[i]) {
-      hand_pressed = i;
-      break;
+    if (e.currentTarget == p1hand[i]) {
+      if (x.turn == 1) {
+        hand_pressed = i;
+        break;
+      }
+      else {
+        return;
+      }
     }
+    else if (e.currentTarget == p2hand[i]) {
+      if (x.turn == 2) {
+        hand_pressed = i;
+        break;
+      }
+      else {
+        return;
+      }
+    }
+  }
+
+  if (x.state == "choose_hand") {
+    let answer = x.action(hand_pressed);
+    if (answer[0] == "select_pair") {
+      update();
+    }
+    else if (answer[0] == "error") {
+      hand_pressed = null;
+      update();
+    }
+    else {
+      hand_pressed = null;
+      update();
+      if (answer[0] == "koikoi_decision") {
+        request_koikoi();
+      }
+      else if (answer[0] == "month_end") {
+        show_month_results();
+      }
+    }
+  }
+  else if (x.state == "select_pair") {
+    let answer = x.action(null);
+    hand_pressed = null;
+    update();
   }
 }
 
@@ -40,15 +84,12 @@ function board_click(e) {
     }
   }
   console.log("click board",j)
-  let answer;
-  if (x.state != "choose_pairs") {
-    answer = x.action(j);
+
+  if (x.state == "choose_hand") {
+    return;
   }
-  else {
-    if (hand_pressed == null) return;
-    answer = x.action(hand_pressed,j);
-  }
-  console.log(answer)
+  let answer = x.action(j);
+  hand_pressed = null
   update();
   if (answer[0] == "koikoi_decision") {
     request_koikoi();
@@ -56,7 +97,46 @@ function board_click(e) {
   else if (answer[0] == "month_end") {
     show_month_results();
   }
-  hand_pressed = null
+}
+
+function highlight_pairs(e) {
+  if (hand_pressed != null || x.state == "flipping_decision") return;
+
+  let card = null;
+  for (let i=0; i<8;++i) {
+    if (e.currentTarget == p1hand[i]) {
+      if (x.turn == 1) {
+        card = x.p1_hand[i];
+        break;
+      }
+      else {
+        return;
+      }
+    }
+    else if (e.currentTarget == p2hand[i]) {
+      if (x.turn == 2) {
+        card = x.p2_hand[i];
+        break;
+      }
+      else {
+        return;
+      }
+    }
+  }
+
+  for (let i=0; i<16; ++i) {
+    if (card != 0 && card_month(card) == card_month(x.board[i])) {
+      board[i].style.borderColor = "green";
+    }
+  }
+}
+
+function unhighlight(e) {
+  if (hand_pressed != null || x.state == "flipping_decision") return;
+
+  for (let i=0; i<16; ++i) {
+    board[i].style.borderColor = "white";
+  }
 }
 
 function request_koikoi() {
@@ -67,7 +147,8 @@ function request_koikoi() {
   hand.textContent = "junk=" + x.junk(collection) + "; ribbons=" + (x.poetry_ribbons(collection) + x.blue_ribbons(collection) + x.ribbons(collection)) +
     "; animals=" + (x.boar_dear_butterfly(collection) + x.animals(collection)) +
     "; brights=" + x.brights(collection) +
-    "; cup=" + (x.moon_viewing(collection) + x.cherryblossom_viewing(collection));
+    "; cup=" + (x.moon_viewing(collection) + x.cherryblossom_viewing(collection)) +
+    "; season=" + x.season(collection);
   let call_koi = document.createElement("button");
   call_koi.textContent = "koikoi";
   call_koi.onclick = () => koikoi_choice(true);
@@ -100,7 +181,8 @@ function show_month_results() {
   hand.textContent = "junk=" + x.junk(collection) + "; ribbons=" + (x.poetry_ribbons(collection) + x.blue_ribbons(collection) + x.ribbons(collection)) +
     "; animals=" + (x.boar_dear_butterfly(collection) + x.animals(collection)) +
     "; brights=" + x.brights(collection) +
-    "; cup=" + (x.moon_viewing(collection) + x.cherryblossom_viewing(collection));
+    "; cup=" + (x.moon_viewing(collection) + x.cherryblossom_viewing(collection)) +
+    "; season=" + x.season(collection);
   let continue_button = document.createElement("button");
   continue_button.textContent = "continue";
   continue_button.onclick = function() {
@@ -117,14 +199,36 @@ function update() {
   deck.replaceChildren();
   if (x.state == "flipping_decision") {
     deck.append(print_card(x.deck[x.deck.length-1]))
+    deck.style.borderColor = "purple";
+  }
+  else {
+    deck.style.borderColor = "white";
   }
 
   for (let i=0; i<8; ++i) {
     p1hand[i].replaceChildren(print_card(x.p1_hand[i]));
     p2hand[i].replaceChildren(print_card(x.p2_hand[i]));
+
+    // color selected hands
+    p1hand[i].style.borderColor = "white";
+    p2hand[i].style.borderColor = "white";
+    if (x.turn == 1 && hand_pressed == i) {
+      p1hand[i].style.borderColor = "red";
+    }
+    else if (x.turn == 2 && hand_pressed == i) {
+      p2hand[i].style.borderColor = "red";
+    }
   }
+
   for (let i=0; i<16; ++i) {
     board[i].replaceChildren(print_card(x.board[i]));
+    board[i].style.borderColor = "white";
+    if (hand_pressed != null && card_month(x.turn == 1 ? x.p1_hand[hand_pressed] : x.p2_hand[hand_pressed]) == card_month(x.board[i])) {
+      board[i].style.borderColor = "red";
+    }
+    if (x.state == "flipping_decision" && card_month(x.deck[x.deck.length-1]) == card_month(x.board[i])) {
+      board[i].style.borderColor = "purple";
+    }
   }
   state.textContent = x.state + "; turn player " + x.turn;
   p1collection.children[0].replaceChildren();

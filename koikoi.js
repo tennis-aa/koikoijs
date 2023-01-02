@@ -10,13 +10,14 @@ export class koikoi {
     this.dealer = 0;
     this.month = 0;
     this.state = "blank";
-    this.possible_states = ["blank","choose_pairs","flipping_decision","koikoi_decision","month_end","instant_win","game_over"];
+    this.possible_states = ["blank","choose_hand","select_pair","flipping_decision","koikoi_decision","month_end","instant_win","game_over"];
     this.p1_year_points = 0;
     this.p2_year_points = 0;
     this.p1_month_points = 0;
     this.p2_month_points = 0;
     this.p1_koi = false;
     this.p2_koi = false;
+    this.hand_selection = 0;
   }
 
   start_year(player,perfect=false) {
@@ -49,7 +50,7 @@ export class koikoi {
     this.p2_collection = [];
     this.board.fill(0);
     this.turn = this.dealer;
-    this.state = "choose_pairs";
+    this.state = "choose_hand";
     this.p1_month_points = 0;
     this.p2_month_points = 0;
     this.p1_koi = false;
@@ -147,8 +148,10 @@ export class koikoi {
         return "choose `true` to call koi and false to peace out";
       case "flipping_decision":
         return "choose the card on the board that you want to pair with the flip.";
-      case "choose_pairs":
+      case "choose_hand":
         return "choose pair in hand and board";
+      case "select_pair":
+        return "select pair on the board";
       case "instant_win":
         return "instant win: any action continues to next month";
       case "game_over":
@@ -158,7 +161,7 @@ export class koikoi {
     }
   }
 
-  action(x,y=null) {
+  action(x) {
     if (this.state == "game_over") {
       return ["game_over"];
     }
@@ -186,9 +189,30 @@ export class koikoi {
         return this.check_if_hand_formed();
       }
     }
-    else if (this.state == "choose_pairs") {
-      let pairing = this.make_pairing_choice(x,y)
+    else if (this.state == "select_pair") {
+      let result = this.select_pair(x);
+      if (result[0] == "error") {
+        this.state = "choose_hand";
+        return result;
+      }
+      else {
+        let flip = this.flip_top_deck();
+        if (flip[0] == "flipping_decision") {
+          this.state = "flipping_decision";
+          return flip;
+        }
+        else {
+          return this.check_if_hand_formed();
+        }
+      }
+    }
+    else if (this.state == "choose_hand") {
+      let pairing = this.make_hand_choice(x)
       if (pairing[0] == "error") {
+        return pairing;
+      }
+      else if (pairing[0] == "select_pair") {
+        this.state = "select_pair";
         return pairing;
       }
       else {
@@ -202,7 +226,6 @@ export class koikoi {
         }
       }
     }
-    // if no hands are formed:
   }
 
   make_koikoi_decision(x) {
@@ -210,7 +233,7 @@ export class koikoi {
       return ["error: not time to make koikoi decision"];
     }
     if (x) {
-      this.state = "choose_pairs";
+      this.state = "choose_hand";
       if (this.turn == 1) {
         this.p1_koi = true;
         this.turn = 2
@@ -250,39 +273,61 @@ export class koikoi {
     }
   }
 
-  make_pairing_choice(x,y) {
+  make_hand_choice(x) {
     let hand = this.turn == 1 ? this.p1_hand : this.p2_hand;
     let collection = this.turn == 1 ? this.p1_collection : this.p2_collection;
 
     if (hand[x] == 0) return ["error","no card from hand selected"];
-    else if (this.board[y]==0) {
+
+    let pairings = [];
+    for (let i=0; i<this.board.length; ++i) {
+      if (this.card_month(hand[x]) == this.card_month(this.board[i]))
+        pairings.push(i);
+    }
+    if (pairings.length == 0) {
+      let y;
       for (let i=0; i<this.board.length; ++i) {
-        if (this.card_month(hand[x]) == this.card_month(this.board[i]))
-          return ["error","attempt to place a card on the board despite there being a pair."];
+        if (this.board[i] == 0){
+          y = i;
+          break;
+        }
       }
       this.board[y] = hand[x];
       hand[x] = 0;
       return ["card_to_board"];
     }
-    else if (this.card_month(hand[x]) != this.card_month(this.board[y])) {
-      return ["error","hand and board are not the same month"];
-    }
-    else { // proper matching
+    else if (pairings.length == 1) {
+      let y = pairings[0];
       collection.push(hand[x],this.board[y]);
       hand[x] = 0;
       this.board[y] = 0;
-      // check if matching 3 cards
-      let pairings = [];
-      for (let i=0; i<this.board.length; ++i) {
-        if (this.card_month(collection[collection.length-1]) == this.card_month(this.board[i]))
-          pairings.push(i);
-      }
-      if (pairings.length == 2) {
-        collection.push(this.board[pairings[0]],this.board[pairings[1]])
-        this.board[pairings[0]] = 0;
-        this.board[pairings[1]] = 0;
-        return ["pairing",collection.slice(collection.length-4)]
-      }
+      return ["pairing",collection.slice(collection.length-2)];
+    }
+    else if (pairings.length == 3) {
+      collection.push(hand[x],this.board[pairings[0]],this.board[pairings[1]],this.board[pairings[2]])
+      hand[x] = 0;
+      this.board[pairings[0]] = 0;
+      this.board[pairings[1]] = 0;
+      this.board[pairings[2]] = 0;
+      return ["pairing",collection.slice(collection.length-4)]
+    }
+    else if (pairings.length == 2) {
+      this.hand_selection = x;
+      return ["select_pair", x, pairings[0], pairings[1]];
+    }
+  }
+
+  select_pair(x) {
+    let hand = this.turn == 1 ? this.p1_hand : this.p2_hand;
+    let collection = this.turn == 1 ? this.p1_collection : this.p2_collection;
+
+    if (this.card_month(hand[this.hand_selection]) != this.card_month(this.board[x])) {
+      return ["error","hand and board are not the same month"]
+    }
+    else {
+      collection.push(hand[this.hand_selection],this.board[x]);
+      hand[this.hand_selection] = 0;
+      this.board[x] = 0;
       return ["pairing",collection.slice(collection.length-2)];
     }
   }
@@ -345,7 +390,6 @@ export class koikoi {
         }
     }
     else if (this.p1_hand.reduce((a,b)=>a+b,0) == 0 && this.p2_hand.reduce((a,b)=>a+b,0) == 0) {
-      console.log("no hands formed this month")
       this.state = "koikoi_decision";
       if (this.dealer == 1) {
         this.p1_month_points = 1;
@@ -358,7 +402,7 @@ export class koikoi {
         return this.make_koikoi_decision(false);
       }
     }
-    this.state = "choose_pairs";
+    this.state = "choose_hand";
     this.turn = this.turn == 1 ? 2 : 1;
     return ["no_hands"];
   }

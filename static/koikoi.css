@@ -55,9 +55,10 @@
 .board > div, .hand > div, .container-deck > div {
   background-color: #a1a1a1;
   margin: 0.5vh 0.5vh;
-  width: 12vh;
-  height: 18vh;
+  width: 10vh;
+  height: 16vh;
   cursor: pointer;
+  border: solid 1vh white;
 }
 
 .collection {
