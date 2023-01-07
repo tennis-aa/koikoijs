@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Hanafuda koikoi</title>
+    <link rel="stylesheet" href="/koikoi.css">
+  </head>
+  <body>
+    <div id="modal_window"></div>
+    <div class="container-game">
+      <div class="container-deck">
+        <div id="deck"></div>
+      </div>
+      <div class="container-handboard">
+        <div class="hand" id="p1hand">
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        </div>
+
+        <div class="board" id="board">
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        </div>
+
+        <div class="hand" id="p2hand">
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        </div>
+      </div>
+      <div class="container-collection">
+        <div id="p1collection" class="collection">
+          <div></div><div></div><div></div><div></div>
+        </div>
+        <div id="p2collection" class="collection">
+          <div></div><div></div><div></div><div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container-bar">
+      <div>Me</div><div id="p1_points"></div>
+      <div id="state"></div>
+      <div id="p2_points"></div><div>Opponent</div>
+    </div>
+    <!-- <script type="text/javascript" src="/socket.io/socket.io.js"></script> -->
+    <script type="text/javascript" src="/koikoi_client.js"></script> 
+  </body>
+</html>

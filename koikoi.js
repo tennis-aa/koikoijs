@@ -1,4 +1,4 @@
-export class koikoi {
+class koikoi {
   constructor() {
     this.deck = [];
     this.p1_hand = Array(8).fill(0);
@@ -17,7 +17,7 @@ export class koikoi {
     this.p2_month_points = 0;
     this.p1_koi = false;
     this.p2_koi = false;
-    this.hand_selection = 0;
+    this.hand_selection = null;
   }
 
   start_year(player,perfect=false) {
@@ -322,12 +322,14 @@ export class koikoi {
     let collection = this.turn == 1 ? this.p1_collection : this.p2_collection;
 
     if (this.card_month(hand[this.hand_selection]) != this.card_month(this.board[x])) {
+      this.hand_selection = null;
       return ["error","hand and board are not the same month"]
     }
     else {
       collection.push(hand[this.hand_selection],this.board[x]);
       hand[this.hand_selection] = 0;
       this.board[x] = 0;
+      this.hand_selection = null;
       return ["pairing",collection.slice(collection.length-2)];
     }
   }
@@ -540,3 +542,5 @@ export class koikoi {
     return 0;
   }
 }
+
+module.exports = { koikoi };

@@ -1,25 +1,46 @@
-let p1hand = document.querySelectorAll("#p1hand>div");
+const ws = new WebSocket("ws:" + window.location.host);
+
+const room_id = Number(window.location.pathname.split("/").pop());
+ws.onopen = () => {
+  console.log("connecting",room_id);
+  ws.send(JSON.stringify({type: "registration", room: room_id}));
+}
+
+let player;
+let x;
+let answer;
+ws.onmessage = (event) => {
+  msg = JSON.parse(event.data);
+  if (msg.type == "player") {
+    player = msg.player;
+  }
+  else if (msg.type == "update") {
+    x = msg.update;
+    answer = msg.answer;
+    update();
+  }
+}
+
+function send_action(act) {
+  ws.send(JSON.stringify({type: "action", action: act}));
+}
+
+//////////////////////////////////////////////////////////
+
 let p2hand = document.querySelectorAll("#p2hand>div");
 let board = document.querySelectorAll("#board>div");
-let p1collection = document.getElementById("p1collection");
-let p2collection = document.getElementById("p2collection");
-let p1_points = document.getElementById("p1_points");
-let p2_points = document.getElementById("p2_points");
+let oppcollection = document.getElementById("p1collection");
+let mycollection = document.getElementById("p2collection");
+let mypoints = document.getElementById("p1_points");
+let opppoints = document.getElementById("p2_points");
 let state = document.getElementById("state");
 let deck = document.getElementById("deck");
 let modal_window = document.getElementById("modal_window");
 
-
-let hand_pressed = null;
-
-
 // Attach events to cards
 for (let i=0; i<8; ++i) {
-  p1hand[i].onclick = hand_click;
   p2hand[i].onclick = hand_click;
-  p1hand[i].onmouseover = highlight_pairs;
   p2hand[i].onmouseover = highlight_pairs;
-  p1hand[i].onmouseout = unhighlight;
   p2hand[i].onmouseout = unhighlight;
 }
 for (let i=0; i<16; ++i) {
@@ -27,55 +48,33 @@ for (let i=0; i<16; ++i) {
 }
 
 function hand_click(e) {
+  if (x.turn != player) return;
+
+  let hand_pressed = null;
   for (let i=0; i<8;++i) {
-    if (e.currentTarget == p1hand[i]) {
-      if (x.turn == 1) {
-        hand_pressed = i;
-        break;
-      }
-      else {
-        return;
-      }
-    }
-    else if (e.currentTarget == p2hand[i]) {
-      if (x.turn == 2) {
-        hand_pressed = i;
-        break;
-      }
-      else {
-        return;
-      }
+    if (e.currentTarget == p2hand[i]) {
+      hand_pressed = i;
+      break;
     }
   }
 
   if (x.state == "choose_hand") {
-    let answer = x.action(hand_pressed);
-    if (answer[0] == "select_pair") {
-      update();
-    }
-    else if (answer[0] == "error") {
-      hand_pressed = null;
-      update();
-    }
-    else {
-      hand_pressed = null;
-      update();
-      if (answer[0] == "koikoi_decision") {
-        request_koikoi();
-      }
-      else if (answer[0] == "month_end") {
-        show_month_results();
-      }
-    }
+    send_action(hand_pressed);
   }
   else if (x.state == "select_pair") {
-    let answer = x.action(null);
-    hand_pressed = null;
-    update();
+    send_action(null);
   }
 }
 
 function board_click(e) {
+  if (x && x.state == "choose_hand") {
+    return;
+  }
+  else if (x.state == "blank") {
+    send_action(null);
+  }
+  if (x.turn != player) return;
+
   let j;
   for (let i=0; i<16;++i) {
     if (e.currentTarget == board[i]){
@@ -83,44 +82,25 @@ function board_click(e) {
       break;
     }
   }
-  console.log("click board",j)
 
-  if (x.state == "choose_hand") {
-    return;
-  }
-  let answer = x.action(j);
-  hand_pressed = null
-  update();
-  if (answer[0] == "koikoi_decision") {
-    request_koikoi();
-  }
-  else if (answer[0] == "month_end") {
-    show_month_results();
-  }
+  send_action(j);
 }
 
 function highlight_pairs(e) {
-  if (hand_pressed != null || x.state == "flipping_decision") return;
+  if (!x || x.turn != player) {
+    e.currentTarget.style.cursor = "not-allowed";
+  }
+  else {
+    e.currentTarget.style.cursor = "pointer";
+  }
+  if (!x || x.state == "select_pair" || x.state == "flipping_decision") return;
 
   let card = null;
+  let hand = player == 1 ? x.p1_hand : x.p2_hand;
   for (let i=0; i<8;++i) {
-    if (e.currentTarget == p1hand[i]) {
-      if (x.turn == 1) {
-        card = x.p1_hand[i];
-        break;
-      }
-      else {
-        return;
-      }
-    }
-    else if (e.currentTarget == p2hand[i]) {
-      if (x.turn == 2) {
-        card = x.p2_hand[i];
-        break;
-      }
-      else {
-        return;
-      }
+    if (e.currentTarget == p2hand[i]) {
+      card = hand[i];
+      break;
     }
   }
 
@@ -132,7 +112,7 @@ function highlight_pairs(e) {
 }
 
 function unhighlight(e) {
-  if (hand_pressed != null || x.state == "flipping_decision") return;
+  if (!x || x.state == "select_pair" || x.state == "flipping_decision") return;
 
   for (let i=0; i<16; ++i) {
     board[i].style.borderColor = "white";
@@ -143,33 +123,32 @@ function request_koikoi() {
   modal_window.replaceChildren();
   let hand = document.createElement("div");
   hand.style.backgroundColor = "white";
-  let collection = x.turn == 1 ? x.p1_collection : x.p2_collection;
-  hand.textContent = "junk=" + x.junk(collection) + "; ribbons=" + (x.poetry_ribbons(collection) + x.blue_ribbons(collection) + x.ribbons(collection)) +
-    "; animals=" + (x.boar_dear_butterfly(collection) + x.animals(collection)) +
-    "; brights=" + x.brights(collection) +
-    "; cup=" + (x.moon_viewing(collection) + x.cherryblossom_viewing(collection)) +
-    "; season=" + x.season(collection);
-  let call_koi = document.createElement("button");
-  call_koi.textContent = "koikoi";
-  call_koi.onclick = () => koikoi_choice(true);
-  let peace_out = document.createElement("button");
-  peace_out.textContent = "Peace out";
-  peace_out.onclick = () => koikoi_choice(false);
+  hand.textContent = "junk=" + x.junk +
+    "; ribbons=" + x.ribbons +
+    "; animals=" + x.animals +
+    "; brights=" + x.brights +
+    "; cup=" + x.cup +
+    "; season=" + x.season;
   modal_window.append(hand);
-  modal_window.append(call_koi);
-  modal_window.append(peace_out);
   modal_window.style.display = "flex";
+  if (x.turn == player) {
+    let call_koi = document.createElement("button");
+    call_koi.textContent = "koikoi";
+    call_koi.onclick = () => koikoi_choice(true);
+    let peace_out = document.createElement("button");
+    peace_out.textContent = "Peace out";
+    peace_out.onclick = () => koikoi_choice(false);
+    modal_window.append(call_koi);
+    modal_window.append(peace_out);
+  }
 }
 
 function koikoi_choice(choice) {
   if (choice) {
-    x.action(true);
-    modal_window.style.display = "none";
-    update();
+    send_action(true);
   }
   else {
-    x.action(false)
-    show_month_results();
+    send_action(false);
   }
 }
 
@@ -177,45 +156,52 @@ function show_month_results() {
   modal_window.replaceChildren();
   let hand = document.createElement("div");
   hand.style.backgroundColor = "white";
-  let collection = x.turn == 1 ? x.p1_collection : x.p2_collection;
-  hand.textContent = "junk=" + x.junk(collection) + "; ribbons=" + (x.poetry_ribbons(collection) + x.blue_ribbons(collection) + x.ribbons(collection)) +
-    "; animals=" + (x.boar_dear_butterfly(collection) + x.animals(collection)) +
-    "; brights=" + x.brights(collection) +
-    "; cup=" + (x.moon_viewing(collection) + x.cherryblossom_viewing(collection)) +
-    "; season=" + x.season(collection);
-  let continue_button = document.createElement("button");
-  continue_button.textContent = "continue";
-  continue_button.onclick = function() {
-    modal_window.style.display = "none";
-    x.action();
-    update();
-  };
+  hand.textContent = "junk=" + x.junk +
+    "; ribbons=" + x.ribbons +
+    "; animals=" + x.animals +
+    "; brights=" + x.brights +
+    "; cup=" + x.cup +
+    "; season=" + x.season;
   modal_window.append(hand);
-  modal_window.append(continue_button);
   modal_window.style.display = "flex";
+  if (x.turn == player) {
+    let continue_button = document.createElement("button");
+    continue_button.textContent = "continue";
+    continue_button.onclick = function() {
+      modal_window.style.display = "none";
+      send_action(null);
+    };
+    modal_window.append(continue_button);
+  }
 }
 
 function update() {
+  if (x.state == "koikoi_decision") {
+    request_koikoi();
+  }
+  else if (x.state == "month_end") {
+    show_month_results();
+  }
+  else {
+    modal_window.style.display = "none";
+  }
+
   deck.replaceChildren();
   if (x.state == "flipping_decision") {
-    deck.append(print_card(x.deck[x.deck.length-1]))
+    deck.append(print_card(x.topdeck))
     deck.style.borderColor = "purple";
   }
   else {
     deck.style.borderColor = "white";
   }
 
+  let hand = player == 1 ? x.p1_hand : x.p2_hand;
   for (let i=0; i<8; ++i) {
-    p1hand[i].replaceChildren(print_card(x.p1_hand[i]));
-    p2hand[i].replaceChildren(print_card(x.p2_hand[i]));
+    p2hand[i].replaceChildren(print_card(hand[i]));
 
     // color selected hands
-    p1hand[i].style.borderColor = "white";
     p2hand[i].style.borderColor = "white";
-    if (x.turn == 1 && hand_pressed == i) {
-      p1hand[i].style.borderColor = "red";
-    }
-    else if (x.turn == 2 && hand_pressed == i) {
+    if (x.turn == player && x.hand_selection == i) {
       p2hand[i].style.borderColor = "red";
     }
   }
@@ -223,36 +209,42 @@ function update() {
   for (let i=0; i<16; ++i) {
     board[i].replaceChildren(print_card(x.board[i]));
     board[i].style.borderColor = "white";
-    if (hand_pressed != null && card_month(x.turn == 1 ? x.p1_hand[hand_pressed] : x.p2_hand[hand_pressed]) == card_month(x.board[i])) {
+    board[i].style.cursor = "auto"; 
+    if (x.hand_selection != null && card_month(x.turn == 1 ? x.p1_hand[x.hand_selection] : x.p2_hand[x.hand_selection]) == card_month(x.board[i])) {
       board[i].style.borderColor = "red";
+      board[i].style.cursor = "pointer"; 
     }
-    if (x.state == "flipping_decision" && card_month(x.deck[x.deck.length-1]) == card_month(x.board[i])) {
+    if (x.state == "flipping_decision" && card_month(x.topdeck) == card_month(x.board[i])) {
       board[i].style.borderColor = "purple";
+      board[i].style.cursor = "pointer"; 
     }
   }
-  state.textContent = x.state + "; turn player " + x.turn;
-  p1collection.children[0].replaceChildren();
-  p1collection.children[1].replaceChildren();
-  p1collection.children[2].replaceChildren();
-  p1collection.children[3].replaceChildren();
-  for (let i=0; i<x.p1_collection.length; ++i) {
+  state.textContent = "month=" + x.month;
+
+  oppcollection.children[0].replaceChildren();
+  oppcollection.children[1].replaceChildren();
+  oppcollection.children[2].replaceChildren();
+  oppcollection.children[3].replaceChildren();
+  let collection = player == 1 ? x.p2_collection : x.p1_collection;
+  for (let i=0; i<collection.length; ++i) {
     let div = document.createElement("div");
-    div.appendChild(print_card(x.p1_collection[i]));
-    let point = card_point(x.p1_collection[i]);
-    p1collection.children[4-point].append(div);
+    div.appendChild(print_card(collection[i]));
+    let point = card_point(collection[i]);
+    oppcollection.children[4-point].append(div);
   }
-  p2collection.children[0].replaceChildren();
-  p2collection.children[1].replaceChildren();
-  p2collection.children[2].replaceChildren();
-  p2collection.children[3].replaceChildren();
-  for (let i=0; i<x.p2_collection.length; ++i) {
+  mycollection.children[0].replaceChildren();
+  mycollection.children[1].replaceChildren();
+  mycollection.children[2].replaceChildren();
+  mycollection.children[3].replaceChildren();
+  collection = player == 1 ? x.p1_collection : x.p2_collection;
+  for (let i=0; i<collection.length; ++i) {
     let div = document.createElement("div");
-    div.appendChild(print_card(x.p2_collection[i]));
-    let point = card_point(x.p2_collection[i]);
-    p2collection.children[4-point].append(div);
+    div.appendChild(print_card(collection[i]));
+    let point = card_point(collection[i]);
+    mycollection.children[4-point].append(div);
   }
-  p1_points.textContent = x.p1_year_points;
-  p2_points.textContent = x.p2_year_points;
+  mypoints.textContent = player == 1 ? x.p1_year_points : x.p2_year_points;
+  opppoints.textContent = player == 1 ? x.p2_year_points : x.p1_year_points;
 }
 
 function print_card(i) {
@@ -261,7 +253,7 @@ function print_card(i) {
     return div;
   }
   let img = document.createElement("img");
-  img.src = "./hanafuda_cards/" + i + ".png";
+  img.src = "../hanafuda_cards/" + i + ".png";
   img.style.width = "100%";
   img.style.height = "100%";
   return img;
