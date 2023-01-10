@@ -210,13 +210,13 @@ function update() {
     board[i].replaceChildren(print_card(x.board[i]));
     board[i].style.borderColor = "white";
     board[i].style.cursor = "auto"; 
-    if (x.hand_selection != null && card_month(x.turn == 1 ? x.p1_hand[x.hand_selection] : x.p2_hand[x.hand_selection]) == card_month(x.board[i])) {
+    if (x.turn == player && x.state == "select_pair" && card_month(hand[x.hand_selection]) == card_month(x.board[i])) {
       board[i].style.borderColor = "red";
       board[i].style.cursor = "pointer"; 
     }
     if (x.state == "flipping_decision" && card_month(x.topdeck) == card_month(x.board[i])) {
       board[i].style.borderColor = "purple";
-      board[i].style.cursor = "pointer"; 
+      if (x.turn == player) board[i].style.cursor = "pointer"; 
     }
   }
   state.textContent = "month=" + x.month;
